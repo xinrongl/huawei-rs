@@ -1,0 +1,6 @@
+checkpoint_dir: /home/xinrong/huawei-rs/checkpoints
+data_dir: /home/xinrong/huawei-rs/data/1024_1024
+log_dir: /home/xinrong/huawei-rs/logs
+project_dir: /home/xinrong/huawei-rs
+split_filename_train: /home/xinrong/huawei-rs/data/1024_1024/train.txt
+split_filename_val: /home/xinrong/huawei-rs/data/1024_1024/val.txt

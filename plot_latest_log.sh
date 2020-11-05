@@ -1,0 +1,1 @@
+. activate_torch.sh && python tools/plot_logs.py "$(find ./logs -name *.log -printf '%T@\t%Tc %p\n' | sort -n | tail -1)"

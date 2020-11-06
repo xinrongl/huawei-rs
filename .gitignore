@@ -1,6 +1,15 @@
+# tmp files
 .vscode/
+**/__pycache__/
+
+# working dirs
 checkpoints/
 data/
 logs/
-**/__pycache__/
+
+# tmp tools
 tools/dump_yaml.py
+
+# files
+*.png
+*.pth

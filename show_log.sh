@@ -1,1 +1,1 @@
-watch -n 5 cat $(find ./logs -name *.log -printf '%T@\t%Tc %p\n' | sort -n | tail -1)
+watch -n 5 tail $(find ./logs -name *.log -printf '%p\n' | sort -n | tail -1)

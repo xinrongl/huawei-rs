@@ -2,7 +2,7 @@
 # cd naic
 # python train.py --encoder resnext50_32x4d -w imagenet --arch unet -b 4 -lr 5e-5 -wd 5e-6 --num_workers 12 --num_epoch 100 --parallel
 import argparse
-import yaml
+import shutil
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
@@ -10,13 +10,14 @@ from pathlib import Path
 import segmentation_models_pytorch as smp
 import torch
 import torch.nn
+import yaml
 from torch import optim
 from torch.utils.data import DataLoader
 
 from src import aug
 from src.dataset import CustomDataset
-from src.optimizer import RAdam
 from src.metrics import mIoU
+from src.optimizer import RAdam
 from src.utils import MyLogger
 
 TIMESTAMP = datetime.now()
@@ -136,6 +137,15 @@ def save_checkpoint(state, filename):
     torch.save(state, filename)
 
 
+def save_best_checkpoint(max_score, checkpoint_path):
+    best_score_suffix = f"{max_score:.4f}.pth"
+    pth_files = checkpoint_path.glob("*.pth")
+    for pth_file in pth_files:
+        if pth_file.name.endswith(best_score_suffix):
+            shutil.copy(pth_file, checkpoint_path.join("model_best.pth"))
+            break
+
+
 def main():
     logger.info(f"Loading images from {cfgs['data_dir']}")
 
@@ -224,7 +234,7 @@ def main():
     if not args.test:
         checkpoint_path.mkdir(parents=True, exist_ok=True)
 
-    max_score = checkpoints["best_fwiou"] if args.resume else 0.0
+    max_score = checkpoints["best_iou"] if args.resume else 0.0
     start_epoch = checkpoints["epoch"] + 1 if args.resume else 0
     end_epoch = start_epoch + args.num_epoch
     logger.info(f"Current best score: {max_score:.4f}")
@@ -248,13 +258,15 @@ def main():
                     "encoder": args.encoder,
                     "encoder_weight": args.weight,
                     "state_dict": model.state_dict(),
-                    "best_iou": val_iou,
+                    "best_iou": max_score,
                     "optimizer": optimizer.state_dict(),
                     "activation": args.activation,
                 },
-                checkpoint_path.joinpath(f"epoch_{epoch}_{val_iou:.4f}.pth"),
+                checkpoint_path.joinpath(f"epoch_{epoch}_{max_score:.4f}.pth"),
             )
             logger.info(f"Save checkpoint at {epoch}.")
+
+    save_best_checkpoint(max_score, checkpoint_path)
 
 
 if __name__ == "__main__":

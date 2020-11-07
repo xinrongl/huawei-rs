@@ -6,6 +6,7 @@
 checkpoints/
 data/
 logs/
+hub/
 
 # tmp tools
 tools/dump_yaml.py

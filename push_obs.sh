@@ -1,0 +1,1 @@
+~/temp/obsutil_linux_amd64_5.2.10/obsutil cp ./submission obs://obs-2020hwcc-lxr -r -f

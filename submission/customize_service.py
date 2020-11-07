@@ -26,7 +26,7 @@ class ImageClassificationService(PTServingBaseService):
 
         self.model = smp.Unet(
             encoder_name="resnext50_32x4d",
-            encoder_weights="imagenet",
+            encoder_weights=None,
             classes=2,
             activation="sigmoid",
             decoder_attention_type="scse",

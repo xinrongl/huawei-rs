@@ -35,20 +35,21 @@ class ImageClassificationService(PTServingBaseService):
         )
         self.use_cuda = False
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        checkpoint = torch.load(self.model_path)
+
+        if torch.cuda.is_available():
+            print("Using GPU for inference")
+            checkpoint = torch.load(self.model_path)
+            self.use_cuda = True
+            self.model = self.model.to(device)
+        else:
+            print("Using CPU for inference")
+            checkpoint = torch.load(self.model_path, map_location="cpu")
+
         state_dict = OrderedDict()
         for key, value in checkpoint["state_dict"].items():
             tmp = key[7:]
             state_dict[tmp] = value
-        if torch.cuda.is_available():
-            print("Using GPU for inference")
-            self.use_cuda = True
-            self.model = self.model.to(device)
-            self.model.load_state_dict(state_dict)
-        else:
-            print("Using CPU for inference")
-            checkpoint = torch.load(self.model_path, map_location="cpu")
-            self.model.load_state_dict(state_dict)
+        self.model.load_state_dict(state_dict)
 
         self.model.eval()
 

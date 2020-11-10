@@ -135,10 +135,10 @@ class TrainDistillEpoch(Epoch):
         T = 2
 
         self.optimizer.zero_grad()
-        prediction_s, _ = self.model.forward(x)
+        prediction_s, *_ = self.model.forward(x)
         loss1 = self.loss(prediction_s, y)
 
-        prediction_t, _ = self.model_t.forward(x)
+        prediction_t, *_ = self.model_t.forward(x)
 
         outputs_s = F.softmax(prediction_s / T, dim=1)
         outputs_t = F.softmax(prediction_t / T, dim=1)

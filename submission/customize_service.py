@@ -3,6 +3,7 @@ import time
 from collections import OrderedDict
 from io import BytesIO
 
+import cv2 as cv
 import log
 import numpy as np
 import segmentation_models_pytorch as smp
@@ -16,6 +17,7 @@ from torch.autograd import Variable
 
 Image.MAX_IMAGE_PIXELS = 1000000000000000
 logger = log.getLogger(__name__)
+# aux_params_dict = None
 aux_params_dict = dict(pooling="avg", dropout=0.5, activation="softmax", classes=2)
 
 
@@ -64,9 +66,11 @@ class ImageClassificationService(PTServingBaseService):
         return preprocessed_data
 
     def _inference(self, data):
-        img = data["input_img"]
-        data = img
+        image = data["input_img"]
+        data = image
+        ori_x, ori_y = image.shape[0], image.shape[1]
         target_l = 1024
+        stride = 1024
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if data.max() > 1:
             data = data / 255.0
@@ -75,6 +79,16 @@ class ImageClassificationService(PTServingBaseService):
         data = data / np.array([0.229, 0.224, 0.225])
         # data = data - np.array([0.444, 0.425, 0.415])
         # data = data / np.array([0.228, 0.221, 0.231])
+
+        h, w = image.shape[0], image.shape[1]
+        new_w, new_h = w, h
+        if (w - target_l) % stride:
+            new_w = ((w - target_l) // stride + 1) * stride + target_l
+        if (h - target_l) % stride:
+            new_h = ((h - target_l) // stride + 1) * stride + target_l
+        data = cv.copyMakeBorder(
+            data, 0, new_h - h, 0, new_w - w, cv.BORDER_CONSTANT, 0
+        )
         data = data.transpose(2, 0, 1)
 
         c, x, y = data.shape
@@ -86,16 +100,27 @@ class ImageClassificationService(PTServingBaseService):
             for j in range(y_num):
                 x_s, x_e = i * target_l, (i + 1) * target_l
                 y_s, y_e = j * target_l, (j + 1) * target_l
+                x_e = min(x_e, x)
+                y_e = min(y_e, y)
                 img = data[:, x_s:x_e, y_s:y_e]
                 img = img[np.newaxis, :, :, :].astype(np.float32)
                 img = torch.from_numpy(img)
                 img = Variable(img.to(device))
-                # out_l = self.model(img)
-                # out_l = out_l.cpu().data.numpy()
-                # out_l = np.argmax(out_l, axis=1)[0]
+                if aux_params_dict:
+                    out_l, _ = self.model(img)
+                    out_h, _ = self.model(torch.flip(img, [-1]))
+                else:
+                    out_l = self.model(img)
+                    out_h = self.model(torch.flip(img, [-1]))
+                # out_l = model(img)
+                out_l = out_l.cpu().data.numpy()
+                out_h = out_h.cpu().data.numpy()
+                out_l += out_h
+                out_l = np.argmax(out_l, axis=1)[0]
                 # out_l = 1 - out_l
-                out_l = np.zeros((target_l, target_l))
                 label[x_s:x_e, y_s:y_e] = out_l.astype(np.int8)
+
+        label = label[:ori_x, :ori_y]
         # _label = label.astype(np.int8).tolist()
         _label = label.astype(np.int8).tolist()
         _len, __len = len(_label), len(_label[0])

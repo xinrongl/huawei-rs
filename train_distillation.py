@@ -19,6 +19,8 @@ from src.dataset import CustomDataset
 from src import metrics
 from src.optimizer import RAdam
 from src.logger import MyLogger
+from src.trainer import TrainDistillEpoch
+
 
 TIMESTAMP = datetime.now()
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -156,6 +158,7 @@ def main():
         classes=[0, 1],
         augmentation=aug.get_training_augmentation(),
         preprocessing=aug.get_preprocessing(preprocessing_fn),
+        mode="test" if args.test else None,
     )
 
     valid_dataset = CustomDataset(
@@ -164,6 +167,7 @@ def main():
         classes=[0, 1],
         augmentation=aug.get_validation_augmentation(),
         preprocessing=aug.get_preprocessing(preprocessing_fn),
+        mode="test" if args.test else None,
     )
 
     train_loader = DataLoader(
@@ -195,12 +199,25 @@ def main():
 
     else:
         model = arch_dict[args.arch]
+
+    # teacher model
+    model_t = smp.Unet(
+        encoder_name="resnext101_32x4d",
+        encoder_weights=None,
+        classes=2,
+        activation=args.activation,
+        decoder_attention_type="scse",
+        decoder_use_batchnorm=True,
+        aux_params=aux_params_dict,
+    )
+
     optimizer = RAdam(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
 
     if args.parallel:
         model = torch.nn.DataParallel(model).cuda()
+        model_t = torch.nn.DataParallel(model_t).cuda()
 
     metric = [
         metrics.cemIoU(threshold=args.threshold),
@@ -209,14 +226,26 @@ def main():
     # loss = smp.utils.losses.CrossEntropyLoss()
     # loss = smp.utils.losses.BCELoss()
     loss = smp.utils.losses.JaccardLoss()
+    # loss = smp.utils.losses.DiceLoss()
+    loss2 = torch.nn.KLDivLoss()
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=args.patience, verbose=True
     )
 
-    train_epoch = smp.utils.train.TrainEpoch(
-        model,
+    # train_epoch = smp.utils.train.TrainEpoch(
+    #     model,
+    #     loss=loss,
+    #     metrics=metric,
+    #     optimizer=optimizer,
+    #     device=DEVICE,
+    #     verbose=True,
+    # )
+    train_epoch = TrainDistillEpoch(
+        model=model,
+        model_t=model_t,
         loss=loss,
+        loss2=loss2,
         metrics=metric,
         optimizer=optimizer,
         device=DEVICE,

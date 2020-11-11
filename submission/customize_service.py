@@ -112,12 +112,11 @@ class ImageClassificationService(PTServingBaseService):
                 else:
                     out_l = self.model(img)
                     out_h = self.model(torch.flip(img, [-1]))
-                # out_l = model(img)
+                out_h = torch.flip(out_h, [-1])
                 out_l = out_l.cpu().data.numpy()
                 out_h = out_h.cpu().data.numpy()
                 out_l += out_h
                 out_l = np.argmax(out_l, axis=1)[0]
-                # out_l = 1 - out_l
                 label[x_s:x_e, y_s:y_e] = out_l.astype(np.int8)
 
         label = label[:ori_x, :ori_y]

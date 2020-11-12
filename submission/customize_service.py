@@ -106,16 +106,15 @@ class ImageClassificationService(PTServingBaseService):
                 img = img[np.newaxis, :, :, :].astype(np.float32)
                 img = torch.from_numpy(img)
                 img = Variable(img.to(device))
-                if aux_params_dict:
-                    out_l, _ = self.model(img)
-                    out_h, _ = self.model(torch.flip(img, [-1]))
-                else:
-                    out_l = self.model(img)
-                    out_h = self.model(torch.flip(img, [-1]))
+
+                out_l, *_ = self.model(img)
+                out_h, *_ = self.model(torch.flip(img, [-1]))
                 out_h = torch.flip(out_h, [-1])
                 out_l = out_l.cpu().data.numpy()
                 out_h = out_h.cpu().data.numpy()
-                out_l += out_h
+                out_l = (out_l + out_h) / 2.0
+                # out_l = np.argmax(out_l, axis=1)[0]
+                out_l = (out_l[0, 0, :, :] > 0.65).astype(np.int8)
                 out_l = np.argmax(out_l, axis=1)[0]
                 label[x_s:x_e, y_s:y_e] = out_l.astype(np.int8)
 

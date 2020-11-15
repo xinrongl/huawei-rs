@@ -18,7 +18,7 @@ from torch.autograd import Variable
 Image.MAX_IMAGE_PIXELS = 1000000000000000
 logger = log.getLogger(__name__)
 # aux_params_dict = None
-aux_params_dict = dict(pooling="avg", dropout=0.5, activation="softmax", classes=2)
+aux_params_dict = dict(pooling="max", dropout=0.5, activation="softmax", classes=2)
 
 
 class ImageClassificationService(PTServingBaseService):
@@ -72,8 +72,8 @@ class ImageClassificationService(PTServingBaseService):
         target_l = 1024
         stride = 1024
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        if data.max() > 1:
-            data = data / 255.0
+        # if data.max() > 1:
+        #     data = data / 255.0
 
         data = data - np.array([0.485, 0.456, 0.406])
         data = data / np.array([0.229, 0.224, 0.225])
@@ -110,12 +110,11 @@ class ImageClassificationService(PTServingBaseService):
                 out_l, *_ = self.model(img)
                 out_h, *_ = self.model(torch.flip(img, [-1]))
                 out_h = torch.flip(out_h, [-1])
-                out_l = out_l.cpu().data.numpy()
-                out_h = out_h.cpu().data.numpy()
+                out_l = F.sigmoid(out_l).cpu().data.numpy()
+                out_h = F.sigmoid(out_h).cpu().data.numpy()
                 out_l = (out_l + out_h) / 2.0
+                out_l = (out_l[0, 1, :, :] > 0.7).astype(np.int8)
                 # out_l = np.argmax(out_l, axis=1)[0]
-                out_l = (out_l[0, 0, :, :] > 0.65).astype(np.int8)
-                out_l = np.argmax(out_l, axis=1)[0]
                 label[x_s:x_e, y_s:y_e] = out_l.astype(np.int8)
 
         label = label[:ori_x, :ori_y]

@@ -13,12 +13,57 @@ import torchvision.transforms as transforms
 from metric.metrics_manager import MetricsManager
 from model_service.pytorch_model_service import PTServingBaseService
 from PIL import Image
+from torch import Tensor
 from torch.autograd import Variable
 
 Image.MAX_IMAGE_PIXELS = 1000000000000000
 logger = log.getLogger(__name__)
-# aux_params_dict = None
-aux_params_dict = dict(pooling="max", dropout=0.5, activation="softmax", classes=2)
+aux_params_dict = dict(pooling="avg", dropout=0.5, activation="sigmoid", classes=2)
+
+
+def torch_rot90(x: Tensor):
+    """
+    Rotate 4D image tensor by 90 degrees
+    :param x:
+    :return:
+    """
+    return torch.rot90(x, k=1, dims=(2, 3))
+
+
+def torch_rot180(x: Tensor):
+    """
+    Rotate 4D image tensor by 180 degrees
+    :param x:
+    :return:
+    """
+    return torch.rot90(x, k=2, dims=(2, 3))
+
+
+def torch_rot270(x: Tensor):
+    """
+    Rotate 4D image tensor by 270 degrees
+    :param x:
+    :return:
+    """
+    return torch.rot90(x, k=3, dims=(2, 3))
+
+
+def torch_transpose(x: Tensor):
+    """
+    Transpose 4D image tensor by main image diagonal
+    :param x:
+    :return:
+    """
+    return x.transpose(2, 3)
+
+
+def torch_none(x: Tensor) -> Tensor:
+    """
+    Return input argument without any modifications
+    :param x: input tensor
+    :return: x
+    """
+    return x
 
 
 class ImageClassificationService(PTServingBaseService):
@@ -27,7 +72,7 @@ class ImageClassificationService(PTServingBaseService):
         self.model_path = model_path
 
         self.model = smp.Unet(
-            encoder_name="resnext50_32x4d",
+            encoder_name="se_resnext101_32x4d",
             encoder_weights=None,
             classes=2,
             activation="sigmoid",
@@ -35,6 +80,7 @@ class ImageClassificationService(PTServingBaseService):
             decoder_use_batchnorm=True,
             aux_params=aux_params_dict,
         )
+
         self.use_cuda = False
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -72,8 +118,8 @@ class ImageClassificationService(PTServingBaseService):
         target_l = 1024
         stride = 1024
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # if data.max() > 1:
-        #     data = data / 255.0
+        if data.max() > 1:
+            data = data / 255.0
 
         data = data - np.array([0.485, 0.456, 0.406])
         data = data / np.array([0.229, 0.224, 0.225])
@@ -107,14 +153,38 @@ class ImageClassificationService(PTServingBaseService):
                 img = torch.from_numpy(img)
                 img = Variable(img.to(device))
 
-                out_l, *_ = self.model(img)
-                out_h, *_ = self.model(torch.flip(img, [-1]))
-                out_h = torch.flip(out_h, [-1])
-                out_l = F.sigmoid(out_l).cpu().data.numpy()
-                out_h = F.sigmoid(out_h).cpu().data.numpy()
-                out_l = (out_l + out_h) / 2.0
-                out_l = (out_l[0, 1, :, :] > 0.7).astype(np.int8)
+                # out_l, *_ = self.model(img)
+                # out_h, *_ = self.model(torch.flip(img, [-1]))
+                # out_h = torch.flip(out_h, [-1])
+                # out_l = F.sigmoid(out_l).cpu().data.numpy()
+                # out_h = F.sigmoid(out_h).cpu().data.numpy()
+                # out_l = (out_l + out_h) / 2.0
+                # out_l = (out_l[0, 1, :, :] > 0.7).astype(np.int8)
                 # out_l = np.argmax(out_l, axis=1)[0]
+                output, *_ = self.model(image)
+
+                for aug, deaug in zip(
+                    [torch_rot90, torch_rot180, torch_rot270],
+                    [torch_rot270, torch_rot180, torch_rot90],
+                ):
+                    tmp, *_ = self.model(aug(image))
+                    x = deaug(tmp)
+                    output += F.sigmoid(x)
+
+                image = torch_transpose(image)
+
+                for aug, deaug in zip(
+                    [torch_none, torch_rot90, torch_rot180, torch_rot270],
+                    [torch_none, torch_rot270, torch_rot180, torch_rot90],
+                ):
+                    tmp, *_ = self.model(aug(image))
+                    x = deaug(tmp)
+                    output += F.sigmoid(torch_transpose(x))
+
+                one_over_8 = float(1.0 / 8.0)
+                out_l = output * one_over_8
+                out_l = out_l.cpu().data.numpy()
+                out_l = (out_l[0, 1, :, :] > 0.75).astype(np.int8)
                 label[x_s:x_e, y_s:y_e] = out_l.astype(np.int8)
 
         label = label[:ori_x, :ori_y]

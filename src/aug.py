@@ -3,11 +3,16 @@ import albumentations as albu
 
 def get_training_augmentation():
     train_transform = [
-        # albu.VerticalFlip(p=0.5),
-        # albu.HorizontalFlip(p=0.5),
-        # albu.ShiftScaleRotate(
-        #     scale_limit=0.5, rotate_limit=0, shift_limit=0.1, p=1, border_mode=0
+        # albu.RandomRotate90(p=1),
+        # albu.HorizontalFlip(p=0.25)
+        # albu.RGBShift(
+        #     r_shift_limit=20,
+        #     g_shift_limit=20,
+        #     b_shift_limit=20,
+        #     always_apply=False,
+        #     p=0.5,
         # ),
+        # albu.CLAHE(p=0.5)
         # albu.IAAAdditiveGaussianNoise(p=1),
         # albu.IAAPerspective(p=0.5),
         # albu.OneOf(

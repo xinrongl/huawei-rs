@@ -1,8 +1,7 @@
 # (1) train segmentation model from the scratch using deeplabv3plus and efficientnet-b3 as encoder.
 # cd naic
-# python train.py --encoder resnet34 -w imagenet --arch unet -b 4 -lr 5e-4 -wd 5e-6 --num_workers 12 --num_epoch 100 --parallel
+# python train.py --encoder resnext101_32x4d -w ssl --arch unet -b 4 -lr 5e-4 -wd 5e-6 --num_workers 12 --num_epoch 100 --parallel
 import argparse
-import os
 import shutil
 from collections import OrderedDict
 from datetime import datetime
@@ -19,6 +18,7 @@ from src import aug, metrics
 from src.dataset import CustomDataset
 from src.logger import MyLogger
 from src.optimizer import RAdam
+
 
 TIMESTAMP = datetime.now()
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -78,12 +78,12 @@ parser.add_argument(
 parser.add_argument("--test", action="store_true", help="Test code use small dataset")
 args, _ = parser.parse_known_args()
 
-aux_params_dict = dict(pooling="max", dropout=0.5, activation="softmax", classes=2)
+aux_params_dict = dict(pooling="avg", dropout=0.5, activation="sigmoid", classes=2)
 
 arch_dict = {
     "unet": smp.Unet(
         encoder_name=args.encoder,
-        encoder_weights=None,
+        encoder_weights=args.weight,
         classes=2,
         activation=args.activation,
         decoder_attention_type="scse",
@@ -126,7 +126,7 @@ arch_dict = {
         encoder_weights=args.weight,
         classes=2,
         activation=args.activation,
-        aux_params=aux_params_dict,
+        aux_params=None,
     ),
 }
 
@@ -154,6 +154,7 @@ def main():
         classes=[0, 1],
         augmentation=aug.get_training_augmentation(),
         preprocessing=aug.get_preprocessing(preprocessing_fn),
+        mode="test" if args.test else None,
     )
 
     valid_dataset = CustomDataset(
@@ -162,6 +163,7 @@ def main():
         classes=[0, 1],
         augmentation=aug.get_validation_augmentation(),
         preprocessing=aug.get_preprocessing(preprocessing_fn),
+        mode="test" if args.test else None,
     )
 
     train_loader = DataLoader(
@@ -202,20 +204,20 @@ def main():
         model = torch.nn.DataParallel(model).cuda()
 
     metric = [
-        metrics.cemIoU(threshold=0.6),
+        metrics.cemIoU(threshold=args.threshold),
     ]
 
-    # loss = smp.utils.losses.CrossEntropyLoss(reduction="sum")
+    # loss = smp.utils.losses.CrossEntropyLoss()
     # loss = smp.utils.losses.BCELoss(reduction="sum")
-    # loss = smp.utils.losses.DiceLoss() # bad
+    # loss = smp.utils.losses.DiceLoss()
     loss = smp.utils.losses.JaccardLoss()
 
-    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-    #     optimizer, mode="min", factor=0.5, patience=args.patience, verbose=True
-    # )
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=args.num_epoch, eta_min=1e-7
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=args.patience, verbose=True
     )
+    # scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    #     optimizer, T_max=args.num_epoch, eta_min=1e-7
+    # )
 
     train_epoch = smp.utils.train.TrainEpoch(
         model,
@@ -286,6 +288,3 @@ if __name__ == "__main__":
         logger.info(f"{arg}: {val}")
     logger.info("\n")
     main()
-    os.system("git add --all")
-    os.system("git commit -m 'update after training'")
-    os.system("git push origin master")

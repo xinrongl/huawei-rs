@@ -34,7 +34,7 @@ with open("cfgs/cfgs.yaml", "r") as f:
 parser = argparse.ArgumentParser("Train segmentation model with SMP api.")
 parser.add_argument("--encoder", default="efficientnet-b5")
 parser.add_argument(
-    "-w", "--weight", default=None, help="Encoder pretrained weight", required=True
+    "-w", "--weight", default="ssl", help="Encoder pretrained weight", required=True
 )
 parser.add_argument("--activation", default="sigmoid")
 parser.add_argument(
@@ -51,7 +51,7 @@ parser.add_argument("-b", "--batch_size", type=int, default=4)
 parser.add_argument("-lr", "--learning_rate", type=float, default=5e-5)
 parser.add_argument("-wd", "--weight_decay", type=float, default=5e-4)
 parser.add_argument("--momentum", type=float, default=0.9)
-parser.add_argument("--threshold", type=float, default=0.5)
+parser.add_argument("--threshold", type=float, default=0.8)
 parser.add_argument(
     "--save_threshold",
     type=float,
@@ -82,7 +82,7 @@ parser.add_argument(
 parser.add_argument("--test", action="store_true", help="Test code use small dataset")
 args, _ = parser.parse_known_args()
 
-aux_params_dict = dict(pooling="avg", dropout=0.5, activation="softmax", classes=2)
+aux_params_dict = dict(pooling="max", dropout=0.5, activation="softmax", classes=2)
 
 arch_dict = {
     "unet": smp.Unet(
@@ -203,7 +203,7 @@ def main():
     # teacher model
     model_t = smp.Unet(
         encoder_name="resnext101_32x4d",
-        encoder_weights=None,
+        encoder_weights="ssl",
         classes=2,
         activation=args.activation,
         decoder_attention_type="scse",
@@ -220,7 +220,7 @@ def main():
         model_t = torch.nn.DataParallel(model_t).cuda()
 
     metric = [
-        metrics.cemIoU(threshold=args.threshold),
+        metrics.mIoU(threshold=args.threshold),
     ]
 
     # loss = smp.utils.losses.CrossEntropyLoss()

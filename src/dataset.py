@@ -17,7 +17,7 @@ class CustomDataset(Dataset):
             _ids = f.readlines()
         self.filenames = list(map(lambda x: x.strip("\n") + ".png", _ids))
         if mode == "test":
-            self.filenames = self.filenames[:100]
+            self.filenames = self.filenames[:30]
         self.image_dir = f"{data_dir}/images"
         self.label_dir = f"{data_dir}/labels"
         self.class_values = classes
@@ -29,6 +29,10 @@ class CustomDataset(Dataset):
         # read data
         image = cv.imread(f"{self.image_dir}/{filename}")
         image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+        # image = image / 255
+
+        # image = image - np.array([0.485, 0.456, 0.406])
+        # image = image / np.array([0.229, 0.224, 0.225])
 
         mask = cv.imread(f"{self.label_dir}/{filename}", -1)
 

@@ -139,36 +139,54 @@ class ImageClassificationService(PTServingBaseService):
         return preprocessed_data
 
     def _inference(self, data):
-        img = data["input_img"]
-        data = img
+        image = data["input_img"]
+        data = image
+        ori_x, ori_y = image.shape[0], image.shape[1]
         target_l = 1024
+        stride = 1024
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
         if data.max() > 1:
-            data = data / 255
+            data = data / 255.0
+
         data = data - np.array([0.485, 0.456, 0.406])
         data = data / np.array([0.229, 0.224, 0.225])
+        # data = data - np.array([0.444, 0.425, 0.415])
+        # data = data / np.array([0.228, 0.221, 0.231])
+
+        h, w = image.shape[0], image.shape[1]
+        new_w, new_h = w, h
+        if (w - target_l) % stride:
+            new_w = ((w - target_l) // stride + 1) * stride + target_l
+        if (h - target_l) % stride:
+            new_h = ((h - target_l) // stride + 1) * stride + target_l
+        data = cv.copyMakeBorder(
+            data, 0, new_h - h, 0, new_w - w, cv.BORDER_CONSTANT, 0
+        )
         data = data.transpose(2, 0, 1)
 
         c, x, y = data.shape
         label = np.zeros((x, y))
         x_num = (x // target_l + 1) if x % target_l else x // target_l
         y_num = (y // target_l + 1) if y % target_l else y // target_l
+
         for i in range(x_num):
             for j in range(y_num):
                 x_s, x_e = i * target_l, (i + 1) * target_l
                 y_s, y_e = j * target_l, (j + 1) * target_l
+                x_e = min(x_e, x)
+                y_e = min(y_e, y)
                 img = data[:, x_s:x_e, y_s:y_e]
                 img = img[np.newaxis, :, :, :].astype(np.float32)
                 img = torch.from_numpy(img)
                 img = Variable(img.to(device))
-
                 out_l = tta_inference(self.model, img)
                 out_l = out_l.cpu().data.numpy()
                 out_l = (out_l[0, 1, :, :] > 0.75).astype(np.int8)
                 out_l = np.argmax(out_l, axis=1)[0]
                 label[x_s:x_e, y_s:y_e] = out_l.astype(np.int8)
+
         # _label = label.astype(np.int8).tolist()
+        label = label[:ori_x, :ori_y]
         _label = label.astype(np.int8).tolist()
         _len, __len = len(_label), len(_label[0])
         o_stack = []

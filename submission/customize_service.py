@@ -15,7 +15,6 @@ from model_service.pytorch_model_service import PTServingBaseService
 from PIL import Image
 from torch import Tensor
 from torch.autograd import Variable
-from skimage.morphology import remove_small_holes, remove_small_objects
 
 Image.MAX_IMAGE_PIXELS = 1000000000000000
 logger = log.getLogger(__name__)
@@ -104,6 +103,7 @@ class ImageClassificationService(PTServingBaseService):
             classes=2,
             activation="sigmoid",
             decoder_attention_type="scse",
+            decoder_channels=[512, 256, 128, 64, 32],
             decoder_use_batchnorm=True,
             aux_params=aux_params_dict,
         )
